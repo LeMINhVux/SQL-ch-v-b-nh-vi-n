@@ -1,0 +1,218 @@
+1,In ra phòng có số tiền thu được lớn nhất
+Select khambenh.map,sum( datediff(khambenh.ngayravien, khambenh.ngaynhankham)*phong.gia1ngaydem)
+ From 
+phong left join khambenh on phong.map = khambenh.map 
+Where khambenh.trangthai = 1
+ group by khambenh.map 
+Order by khambenh.map desc
+ limit 1;
+
+2,In ra thông tin của những phòng đang chống
+select*from phong 
+where map not in 
+(SELECT phong.map 
+FROM 
+phong RIGHT JOIN khambenh 
+ON khambenh.map = phong.map
+ ORDER BY phong.map);
+
+3,Xuất ra những bác sĩ có kinh nghiệm <= 2 năm và phụ trách nhiều hơn 2 bệnh nhân(Vũ)
+Select bacsi.mabs, bacsi.hoten, bacsi.kinhnghiem, count(khambenh.mabn) as soluongbenhnhan
+From bacsi left join khambenh on bacsi.mabs = khambenh.mabs
+Where bacsi.kinhnghiem <= 2
+Group by bacsi.mabs having count(khambenh.mabn) >= 2;
+4, tìm khoa mà chưa tuyển được bác sĩ nào
+select*from khoadieutri 
+where mak not in
+(select khoadieutri.mak 
+from khoadieutri,bacsi 
+where khoadieutri.mak=bacsi.mak);
+5,Tìm ra loại thuốc được dùng phổ biến nhất
+select thuoc.mat,count(thuoc.mat) as dem 
+from 
+khambenh left join benh On benh.mab=khambenh.mab left join thuoc ON thuoc.mat=benh.mat 
+group by thuoc.mat 
+order by dem desc limit 1;
+6,Những bệnh mà chỉ nam mắc phải
+
+select benh.mab, benh.benh
+ from benh right join khambenh on benh.mab = khambenh.mab
+ where benh.mab not in ( select khambenh.mab  
+         from khambenh left join benhnhan on khambenh.mabn =     benhnhan.mabn  
+          where benhnhan.gioitinh = 'nu') 
+group by benh.mab
+order by benh. mab;
+7, in ra bác sĩ vào nghề trẻ nhất 
+select*from bacsi 
+order by (2022-CONVERT(MID(ngaysinh,7,4),BINARY)-kinhnghiem)
+ limit 1;
+8,Hôm nay hai bệnh nhân số 136 và 131 xuất viện nên hãy cập nhật lại ngày ra viện và trạng thái(ở cả 2 bảng benhnhan và khambenh) cho họ.
+DELIMITER $$
+CREATE TRIGGER
+capnhattrangthai  AFTER UPDATE ON khambenh
+FOR EACH ROW
+BEGIN
+Update benhnhan set trangthai=1
+where mabn IN (SELECT mabn from khambenh where trangthai=1); END;
+UPDATE khambenh set
+ngayravien=NOW() where makb=131 OR makb=136;
+UPDATE khambenh set trangthai=1
+where ngaynhankham<ngayravien;
+UPDATE khambenh set ngayravien=NULL
+where ngaynhankham>ngayravien;$$
+DELIMITER ;
+
+
+9,In ra những bác sĩ đang rảnh cùng khoa với bác sĩ phụ trách nhiều bệnh nhân nhất
+select*from bacsi 
+where mabs 
+not in 
+(select khambenh.mabs 
+from bacsi right join khambenh 
+on khambenh.mabs=bacsi.mabs where khambenh.trangthai=0)
+ AND 
+mak in (select bacsi.mak from bacsi left join khoadieutri 
+on khoadieutri.mak=bacsi.mak 
+where bacsi.mabs in
+ (select mabs from khambenh  group by mabs  having count(mabn) >= all  (select count(mabn) from khambenh group by mabs order by count(mabn) desc))) ;
+10,In ra bệnh có thời gian trung bình khỏi nhanh nhất và lâu nhất đã được chữa tại bệnh viện này 
+select khambenh.mab, sum(datediff(khambenh.ngayravien, khambenh.ngaynhankham))/count(khambenh.mab) as TB 
+from benh right join khambenh on khambenh.mab=benh.mab 
+where trangthai=1
+ group by mab
+ HAVING sum(datediff(khambenh.ngayravien, khambenh.ngaynhankham))/count(khambenh.mab)
+ <= ALL (SELECT sum(datediff(khambenh.ngayravien, khambenh.ngaynhankham))/count(khambenh.mab) 
+from benh
+ right join khambenh
+on khambenh.mab=benh.mab 
+where trangthai=1
+ group by khambenh.mab) OR sum(datediff(khambenh.ngayravien, khambenh.ngaynhankham))/count(khambenh.mab) >= ALL (SELECT sum(datediff(khambenh.ngayravien, khambenh.ngaynhankham))/count(khambenh.mab) from benh right join khambenh on khambenh.mab=benh.mab where trangthai=1 group by khambenh.mab);
+
+11.Tìm phòng còn trống và giá rẻ nhất
+Select * from phong
+Where map not in ( select map from khambenh )
+          	and gia1ngaydem = ( select min(gia1ngaydem) from phong );
+
+12.Tính tiền phòng ( trangthai = 1 tức là đã ra viện )
+Select khambenh.mabn, khambenh.map, datediff(khambenh.ngayravien, khambenh.ngaynhankham)*phong.gia1ngaydem as tienphong
+From phong left join khambenh on phong.map = khambenh.map
+Where khambenh.trangthai = 1
+Order by khambenh.mabn;
+
+13.Xuất ra loại thuốc không được sử dụng ( danh sách )
+Select * from thuoc 
+Where mat not in ( select thuoc.mat
+         from khambenh left join benh on benh.mab = khambenh.mab 
+                         left join thuoc oN thuoc.mat=benh.mat 
+ 		         group by thuoc.mat 
+         order by mat);
+
+
+
+
+
+
+
+14.Xuất ra những bệnh chỉ gặp ở nữ 
+Select benh.mab, benh.benh
+From benh right join khambenh on benh.mab = khambenh.mab
+Where benh.mab not in ( select khambenh.mab  
+      from khambenh left join benhnhan on khambenh.mabn = benhnhan.mabn  
+      where benhnhan.gioitinh = 'nam' ) 
+group by benh.mab
+order by benh. mab;
+
+15.Đưa ra những bệnh nhân trên 35 tuổi và bệnh của họ ( trong dữ liệu, bệnh nhân có độ tuổi từ 32 đến 38
+Select benhnhan.mabn, benhnhan.hoten, (year(curdate()) - convert(mid(ngaysinh,7,4),binary) ) as tuoi, benh.benh
+From benhnhan right join khambenh on benhnhan.mabn = khambenh.mabn
+                            left join benh on khambenh.mab = benh.mab
+Where (year(curdate()) - convert(mid(ngaysinh,7,4),binary) ) >= 35
+order by benhnhan.mabn;
+
+16.Xuất ra những phòng có nhiều hơn 3 bệnh nhân
+Select phong.map, phong.tenphong, count(khambenh.mabn) as soluongbenhnhan
+From phong left join khambenh on phong.map = khambenh.map
+Group by phong.map 
+Having count(khambenh.mabn) >= 3;
+
+
+
+
+
+17.Xuất ra những bác sĩ có kinh nghiệm >= 5 năm nhưng không phụ trách bệnh nhân nào
+Select  * from bacsi 
+Where mabs not in ( select khambenh.mabs 
+from bacsi right join khambenh on khambenh.mabs = bacsi.mabs 
+order by bacsi.mabs) 
+Group by mabs 
+Having kinhnghiem >= 5;
+
+
+
+18.Đưa ra một trong những bệnh nhân nằm viện lâu nhất 
+Select mabn, case when trangthai = 0 then datediff(now(),ngaynhankham) 
+			                             else datediff(ngayravien,ngaynhankham) 
+		         end as songaynamvien
+From khambenh
+Order by songaynamvien desc limit 1;
+
+
+
+
+
+
+
+
+
+
+19.In ra khoa có số lượng ( bác sĩ có đang điều trị cho bênh nhân )  nhiều nhất
+Select khoadieutri.mak, count(mabs) as soluongbacsi
+From khoadieutri left join bacsi on khoadieutri.mak = bacsi.mak
+Where bacsi.mabs in ( select mabs
+			   from khambenh 
+			   group by mabs )
+group by khoadieutri.mak 
+having count(mabs) >= all ( select count(mabs) 
+				 from bacsi
+				where mabs in ( select mabs
+						     from khambenh 
+						     group by mabs )
+				 group by mak );
+
+
+
+
+
+
+
+
+
+
+
+
+20. Đưa ra bệnh nhân đã ra viện và có tổng chi phí ( tiền phòng + tiền thuốc ) là lớn nhất
+Tạo 2 view gồm tienphong và tienthuoc
+Create view tienphong as 
+Select khambenh.mabn, khambenh.map, datediff(khambenh.ngayravien, khambenh.ngaynhankham)*phong.gia1ngaydem as tienphong
+From phong left join khambenh on phong.map = khambenh.map
+Where khambenh.trangthai = 1
+Order by khambenh.mabn;
+
+
+
+
+( nếu thuốc có đơn vị là viên thì nhân giá lên 1000, còn lại giữ nguyên giá )
+Create view tienthuoc as 
+select khambenh.mabn, case
+				when thuoc.donvi like '%vien%' then gia*1000
+				else gia*1
+		                end as tienthuoc
+from thuoc right join benh on thuoc.mat = benh.mat left join khambenh on benh.mab = khambenh.mab
+where khambenh.trangthai = 1;
+
+select tienphong.mabn, (tienphong.tienphong + tienthuoc.tienthuoc) as tongchiphi 
+from tienphong inner join tienthuoc on tienphong.mabn = tienthuoc.mabn 
+order by tongchiphi desc limit 1;
+
+
+
